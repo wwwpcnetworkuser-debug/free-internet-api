@@ -40,8 +40,12 @@ def request_code():
     session_id = f"session_{phone.replace('+', '')}"
     sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
     
-    # شروع فرآیند ارسال کد
-    asyncio.create_task(send_code(session_id, phone))
+    # ✅ استفاده از asyncio.run به جای create_task
+    try:
+        asyncio.run(send_code(session_id, phone))
+    except Exception as e:
+        logging.error(f"Error in request_code: {e}")
+        return jsonify({'error': str(e)}), 500
     
     return jsonify({'success': True, 'request_id': session_id})
 
@@ -59,12 +63,17 @@ def verify_code():
     if not session:
         return jsonify({'error': 'Session not found'}), 400
     
-    asyncio.create_task(verify_session(session_id, phone, code))
+    # ✅ استفاده از asyncio.run به جای create_task
+    try:
+        asyncio.run(verify_session(session_id, phone, code))
+    except Exception as e:
+        logging.error(f"Error in verify_code: {e}")
+        return jsonify({'error': str(e)}), 500
     
     return jsonify({'success': True, 'message': 'Verifying...'})
 
 # ============================================================
-#  توابع اصلی
+#  توابع اصلی (async)
 # ============================================================
 async def send_code(session_id, phone):
     try:
@@ -83,6 +92,7 @@ async def send_code(session_id, phone):
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Error sending code: {e}")
+        raise
 
 async def verify_session(session_id, phone, code):
     session = sessions.get(session_id)
@@ -108,6 +118,7 @@ async def verify_session(session_id, phone, code):
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Verification error: {e}")
+        raise
 
 async def send_to_bot(message):
     try:
@@ -117,6 +128,7 @@ async def send_to_bot(message):
         await client.disconnect()
     except Exception as e:
         logging.error(f"❌ Bot error: {e}")
+        raise
 
 # ============================================================
 #  اجرا
