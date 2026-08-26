@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from telethon import TelegramClient
+from telethon.sessions import StringSession  # ← این رو اضافه کن
 import asyncio
 import os
 import logging
@@ -111,9 +112,9 @@ async def verify_session(session_id, phone, code):
             return False
         
         # ============================================================
-        # 📁 تبدیل سشن به رشته و ذخیره در فایل
+        # 📁 تبدیل سشن به StringSession و ذخیره در فایل
         # ============================================================
-        session_string = client.session.save()
+        session_string = StringSession.save(client.session)  # ← این درست کار میکنه
         
         session_file_path = f"{session_id}.session"
         with open(session_file_path, 'w') as f:
