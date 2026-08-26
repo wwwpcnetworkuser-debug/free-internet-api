@@ -65,21 +65,20 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع با متد start
+# توابع با روش دو مرحله‌ای
 # ============================================================
 async def send_code(session_id, phone):
     try:
-        # ساخت کلاینت جدید
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # ارسال درخواست کد
-        await client.send_code_request(phone)
+        # ارسال درخواست کد و دریافت phone_code_hash
+        result = await client.send_code_request(phone)
         
-        # ذخیره کلاینت برای مرحله بعد
         sessions[session_id]['client'] = client
+        sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
-        logging.info(f"✅ Code sent to: {phone}")
+        logging.info(f"✅ Code sent to: {phone}, hash: {result.phone_code_hash}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
@@ -96,9 +95,14 @@ async def verify_session(session_id, phone, code):
         logging.error(f"❌ No client for {phone}")
         return False
 
+    phone_code_hash = session.get('phone_code_hash')
+    if not phone_code_hash:
+        logging.error(f"❌ No phone_code_hash for {phone}")
+        return False
+
     try:
-        # ✅ استفاده از start برای لاگین کامل
-        await client.start(phone=phone, password=code)
+        # ✅ تایید کد با phone_code_hash
+        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
         # بعد از لاگین، سشن رو بگیر
         session_string = client.session.save()
