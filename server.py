@@ -65,19 +65,18 @@ def verify_code():
         logging.error(f"Error in verify_code: {e}")
         return jsonify({'error': str(e)}), 500
 
+# ============================================================
+#  ✅ تابع send_code (اصلاح‌شده)
+# ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # ============================================================
-        #  🔥 SMS اجباری با همه پارامترها
-        # ============================================================
+        # فقط force_sms=True
         result = await client.send_code_request(
             phone,
-            force_sms=True,
-            allow_flash_call=False,
-            allow_app_hash=False  # ← این خط رو اضافه کن!
+            force_sms=True
         )
         
         sessions[session_id]['client'] = client
@@ -91,6 +90,9 @@ async def send_code(session_id, phone):
         logging.error(f"❌ Error: {e}")
         raise
 
+# ============================================================
+#  بقیه توابع
+# ============================================================
 async def verify_session(session_id, phone, code):
     session = sessions.get(session_id)
     if not session:
